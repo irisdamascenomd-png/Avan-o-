@@ -1,0 +1,2 @@
+cd procrastinacao-zero
+npm install

@@ -1,0 +1,1159 @@
+'use client';
+
+import React, { useState, useEffect, useRef } from 'react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+
+// Interfaces TypeScript
+interface User {
+  id: string;
+  nome: string;
+  email: string;
+  pontos: number;
+  streak: number;
+  nivel: number;
+  ultimoFoco?: string;
+}
+
+interface Tarefa {
+  id: string;
+  titulo: string;
+  notas: string;
+  prioridade: 'baixa' | 'media' | 'alta';
+  prazo?: string;
+  status: 'pendente' | 'concluida';
+  createdAt: string;
+}
+
+interface SessaoFoco {
+  id: string;
+  taskId?: string;
+  inicio: string;
+  fim?: string;
+  duracao: number; // em minutos
+  data: string;
+}
+
+interface Distrator {
+  id: string;
+  hostname: string;
+}
+
+// Dados mockados para demonstração (em produção seria banco de dados)
+const mockUser: User = {
+  id: '1',
+  nome: 'João Silva',
+  email: 'joao@exemplo.com',
+  pontos: 250,
+  streak: 5,
+  nivel: 3,
+  ultimoFoco: new Date().toISOString().split('T')[0]
+};
+
+export default function ProcrastinacaoZeroApp() {
+  // Estados globais
+  const [currentUser, setCurrentUser] = useState<User>(mockUser);
+  const [isLoggedIn, setIsLoggedIn] = useState(true);
+  const [currentTab, setCurrentTab] = useState('dashboard');
+  
+  // Estados para tarefas
+  const [tarefas, setTarefas] = useState<Tarefa[]>([
+    {
+      id: '1',
+      titulo: 'Estudar React para TCC',
+      notas: 'Focar nos hooks e componentes funcionais',
+      prioridade: 'alta',
+      prazo: '2024-12-31',
+      status: 'pendente',
+      createdAt: new Date().toISOString()
+    },
+    {
+      id: '2',
+      titulo: 'Revisar literatura do TCC',
+      notas: 'Ler artigos sobre procrastinação e produtividade',
+      prioridade: 'media',
+      status: 'concluida',
+      createdAt: new Date(Date.now() - 86400000).toISOString()
+    }
+  ]);
+
+  // Estados para foco
+  const [sessoesFoco, setSessoesFoco] = useState<SessaoFoco[]>([
+    {
+      id: '1',
+      taskId: '1',
+      inicio: new Date(Date.now() - 1800000).toISOString(),
+      fim: new Date().toISOString(),
+      duracao: 30,
+      data: new Date().toISOString().split('T')[0]
+    },
+    {
+      id: '2',
+      taskId: '2',
+      inicio: new Date(Date.now() - 86400000).toISOString(),
+      fim: new Date(Date.now() - 86400000 + 2400000).toISOString(),
+      duracao: 40,
+      data: new Date(Date.now() - 86400000).toISOString().split('T')[0]
+    }
+  ]);
+
+  // Estados para distratores
+  const [distratores, setDistratores] = useState<Distrator[]>([
+    { id: '1', hostname: 'youtube.com' },
+    { id: '2', hostname: 'instagram.com' },
+    { id: '3', hostname: 'tiktok.com' }
+  ]);
+
+  // Estados para sessão de foco
+  const [isFocusing, setIsFocusing] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<Tarefa | null>(null);
+  const [startTime, setStartTime] = useState<Date | null>(null);
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Estados para formulários
+  const [newTask, setNewTask] = useState({
+    titulo: '',
+    notas: '',
+    prioridade: 'media' as 'baixa' | 'media' | 'alta',
+    prazo: ''
+  });
+  const [newDistrator, setNewDistrator] = useState('');
+
+  // Estados para login
+  const [loginForm, setLoginForm] = useState({
+    email: '',
+    password: '',
+    nome: ''
+  });
+  const [isSignup, setIsSignup] = useState(false);
+
+  // Efeito para timer do foco
+  useEffect(() => {
+    if (isFocusing && startTime) {
+      intervalRef.current = setInterval(() => {
+        setElapsedTime(Math.floor((Date.now() - startTime.getTime()) / 1000));
+      }, 1000);
+    } else {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    }
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, [isFocusing, startTime]);
+
+  // Funções utilitárias
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const calculateStreak = () => {
+    const today = new Date().toISOString().split('T')[0];
+    const sessoesHoje = sessoesFoco.filter(s => s.data === today);
+    const tempoHoje = sessoesHoje.reduce((total, s) => total + s.duracao, 0);
+    
+    if (tempoHoje >= 25) {
+      if (currentUser.ultimoFoco !== today) {
+        setCurrentUser(prev => ({
+          ...prev,
+          streak: prev.streak + 1,
+          ultimoFoco: today
+        }));
+      }
+    }
+  };
+
+  // Funções de autenticação
+  const handleLogin = () => {
+    if (isSignup) {
+      // Simular cadastro
+      const newUser: User = {
+        id: Date.now().toString(),
+        nome: loginForm.nome,
+        email: loginForm.email,
+        pontos: 0,
+        streak: 0,
+        nivel: 1
+      };
+      setCurrentUser(newUser);
+    }
+    setIsLoggedIn(true);
+    setCurrentTab('dashboard');
+  };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    setCurrentTab('login');
+  };
+
+  // Funções para tarefas
+  const createTask = () => {
+    if (!newTask.titulo.trim()) return;
+
+    const task: Tarefa = {
+      id: Date.now().toString(),
+      titulo: newTask.titulo,
+      notas: newTask.notas,
+      prioridade: newTask.prioridade,
+      prazo: newTask.prazo || undefined,
+      status: 'pendente',
+      createdAt: new Date().toISOString()
+    };
+
+    setTarefas(prev => [task, ...prev]);
+    setNewTask({ titulo: '', notas: '', prioridade: 'media', prazo: '' });
+  };
+
+  const completeTask = (taskId: string) => {
+    setTarefas(prev => 
+      prev.map(task => 
+        task.id === taskId 
+          ? { ...task, status: 'concluida' as const }
+          : task
+      )
+    );
+
+    // Gamificação: +10 pontos
+    setCurrentUser(prev => ({
+      ...prev,
+      pontos: prev.pontos + 10,
+      nivel: Math.floor((prev.pontos + 10) / 100) + 1
+    }));
+  };
+
+  const deleteTask = (taskId: string) => {
+    setTarefas(prev => prev.filter(task => task.id !== taskId));
+  };
+
+  // Funções para foco
+  const startFocus = (task: Tarefa) => {
+    // Verificar distratores
+    const distratorList = distratores.map(d => d.hostname).join(', ');
+    if (distratorList) {
+      alert(`⚠️ Evite acessar estes sites durante o foco: ${distratorList}`);
+    }
+
+    setSelectedTask(task);
+    setStartTime(new Date());
+    setIsFocusing(true);
+    setElapsedTime(0);
+  };
+
+  const endFocus = () => {
+    if (!startTime) return;
+
+    const endTime = new Date();
+    const duracao = Math.floor((endTime.getTime() - startTime.getTime()) / 60000); // em minutos
+
+    const sessao: SessaoFoco = {
+      id: Date.now().toString(),
+      taskId: selectedTask?.id,
+      inicio: startTime.toISOString(),
+      fim: endTime.toISOString(),
+      duracao,
+      data: new Date().toISOString().split('T')[0]
+    };
+
+    setSessoesFoco(prev => [sessao, ...prev]);
+
+    // Gamificação: +1 ponto a cada 5 minutos
+    const pontosFoco = Math.floor(duracao / 5);
+    setCurrentUser(prev => ({
+      ...prev,
+      pontos: prev.pontos + pontosFoco,
+      nivel: Math.floor((prev.pontos + pontosFoco) / 100) + 1
+    }));
+
+    // Reset
+    setIsFocusing(false);
+    setSelectedTask(null);
+    setStartTime(null);
+    setElapsedTime(0);
+
+    // Calcular streak
+    calculateStreak();
+
+    alert(`🎉 Sessão de foco concluída! Duração: ${duracao} minutos. Pontos ganhos: ${pontosFoco}`);
+  };
+
+  // Funções para distratores
+  const addDistrator = () => {
+    if (!newDistrator.trim()) return;
+
+    const distrator: Distrator = {
+      id: Date.now().toString(),
+      hostname: newDistrator.toLowerCase().replace(/^https?:\/\//, '')
+    };
+
+    setDistratores(prev => [distrator, ...prev]);
+    setNewDistrator('');
+  };
+
+  const removeDistrator = (distratorId: string) => {
+    setDistratores(prev => prev.filter(d => d.id !== distratorId));
+  };
+
+  // Calcular dados do dashboard
+  const tarefasAbertas = tarefas.filter(t => t.status === 'pendente').length;
+  const tarefasConcluidas = tarefas.filter(t => t.status === 'concluida').length;
+  const tempoHoje = sessoesFoco
+    .filter(s => s.data === new Date().toISOString().split('T')[0])
+    .reduce((total, s) => total + s.duracao, 0);
+
+  // Dados para relatórios (últimos 7 dias)
+  const last7Days = Array.from({ length: 7 }, (_, i) => {
+    const date = new Date();
+    date.setDate(date.getDate() - i);
+    return date.toISOString().split('T')[0];
+  }).reverse();
+
+  const dailyFocusData = last7Days.map(date => {
+    const dayMinutes = sessoesFoco
+      .filter(s => s.data === date)
+      .reduce((total, s) => total + s.duracao, 0);
+    return { date: new Date(date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }), minutes: dayMinutes };
+  });
+
+  const dailyTasksData = last7Days.map(date => {
+    const dayTasks = tarefas.filter(t => 
+      t.status === 'concluida' && 
+      t.createdAt.split('T')[0] === date
+    ).length;
+    return { date: new Date(date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }), tasks: dayTasks };
+  });
+
+  // Tela de Login
+  if (!isLoggedIn) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+        <Card className="w-96">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl font-bold text-blue-600">
+              🎯 Procrastinação Zero
+            </CardTitle>
+            <CardDescription>
+              {isSignup ? 'Crie sua conta' : 'Entre na sua conta'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {isSignup && (
+              <div>
+                <Label htmlFor="nome">Nome</Label>
+                <Input
+                  id="nome"
+                  value={loginForm.nome}
+                  onChange={(e) => setLoginForm(prev => ({ ...prev, nome: e.target.value }))}
+                  placeholder="Seu nome completo"
+                />
+              </div>
+            )}
+            <div>
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={loginForm.email}
+                onChange={(e) => setLoginForm(prev => ({ ...prev, email: e.target.value }))}
+                placeholder="seu@email.com"
+              />
+            </div>
+            <div>
+              <Label htmlFor="password">Senha</Label>
+              <Input
+                id="password"
+                type="password"
+                value={loginForm.password}
+                onChange={(e) => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
+                placeholder="••••••••"
+              />
+            </div>
+            <Button onClick={handleLogin} className="w-full bg-blue-600 hover:bg-blue-700">
+              {isSignup ? 'Cadastrar' : 'Entrar'}
+            </Button>
+            <Button 
+              variant="ghost" 
+              onClick={() => setIsSignup(!isSignup)} 
+              className="w-full"
+            >
+              {isSignup ? 'Já tenho conta' : 'Criar conta'}
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => setIsLoggedIn(true)} 
+              className="w-full text-sm"
+            >
+              Demo (pular login)
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <header className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center py-4">
+            <div className="flex items-center space-x-4">
+              <h1 className="text-2xl font-bold text-blue-600">🎯 Procrastinação Zero</h1>
+            </div>
+            <div className="flex items-center space-x-4">
+              <span className="text-sm text-gray-600">Olá, {currentUser.nome}</span>
+              <Avatar>
+                <AvatarFallback>{currentUser.nome.substring(0, 2).toUpperCase()}</AvatarFallback>
+              </Avatar>
+              <Button variant="outline" size="sm" onClick={handleLogout}>
+                Sair
+              </Button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Navigation Tabs */}
+      <nav className="bg-white border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex space-x-8 overflow-x-auto">
+            {[
+              { id: 'dashboard', label: '📊 Dashboard' },
+              { id: 'tarefas', label: '📝 Tarefas' },
+              { id: 'foco', label: '🎯 Foco' },
+              { id: 'relatorios', label: '📈 Relatórios' },
+              { id: 'distratores', label: '🚫 Distratores' },
+              { id: 'perfil', label: '👤 Perfil' }
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setCurrentTab(tab.id)}
+                className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+                  currentTab === tab.id
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </nav>
+
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+        {/* Dashboard */}
+        {currentTab === 'dashboard' && (
+          <div className="space-y-6">
+            <h2 className="text-3xl font-bold text-gray-900">Dashboard</h2>
+            
+            {/* Cards de métricas */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Tarefas Abertas</CardTitle>
+                  <span className="text-2xl">📝</span>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-orange-600">{tarefasAbertas}</div>
+                  <p className="text-xs text-gray-600">tarefas pendentes</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Tempo Focado Hoje</CardTitle>
+                  <span className="text-2xl">⏱️</span>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-green-600">{tempoHoje} min</div>
+                  <p className="text-xs text-gray-600">minutos de foco</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Pontos</CardTitle>
+                  <span className="text-2xl">🏆</span>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-blue-600">{currentUser.pontos}</div>
+                  <p className="text-xs text-gray-600">Nível {currentUser.nivel}</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Streak</CardTitle>
+                  <span className="text-2xl">🔥</span>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-red-600">{currentUser.streak}</div>
+                  <p className="text-xs text-gray-600">dias consecutivos</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Resumo das atividades */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Tarefas Recentes</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {tarefas.slice(0, 5).map(task => (
+                      <div key={task.id} className="flex items-center justify-between p-2 border rounded">
+                        <div className="flex-1">
+                          <p className="font-medium">{task.titulo}</p>
+                          <p className="text-sm text-gray-600">
+                            Prioridade: {task.prioridade} • Status: {task.status}
+                          </p>
+                        </div>
+                        <div className={`px-2 py-1 rounded text-xs font-medium ${
+                          task.status === 'concluida' 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-orange-100 text-orange-800'
+                        }`}>
+                          {task.status === 'concluida' ? '✅' : '📝'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Sessões de Foco Recentes</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {sessoesFoco.slice(0, 5).map(sessao => {
+                      const task = tarefas.find(t => t.id === sessao.taskId);
+                      return (
+                        <div key={sessao.id} className="flex items-center justify-between p-2 border rounded">
+                          <div className="flex-1">
+                            <p className="font-medium">{task?.titulo || 'Tarefa removida'}</p>
+                            <p className="text-sm text-gray-600">
+                              {new Date(sessao.inicio).toLocaleString('pt-BR')}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-bold text-green-600">{sessao.duracao} min</p>
+                            <p className="text-xs text-gray-600">+{Math.floor(sessao.duracao / 5)} pts</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        )}
+
+        {/* Tarefas */}
+        {currentTab === 'tarefas' && (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-3xl font-bold text-gray-900">Gerenciar Tarefas</h2>
+              <div className="text-sm text-gray-600">
+                {tarefasConcluidas} concluídas • {tarefasAbertas} pendentes
+              </div>
+            </div>
+
+            {/* Formulário para nova tarefa */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Nova Tarefa</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label htmlFor="titulo">Título</Label>
+                  <Input
+                    id="titulo"
+                    value={newTask.titulo}
+                    onChange={(e) => setNewTask(prev => ({ ...prev, titulo: e.target.value }))}
+                    placeholder="O que você precisa fazer?"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="notas">Notas</Label>
+                  <Textarea
+                    id="notas"
+                    value={newTask.notas}
+                    onChange={(e) => setNewTask(prev => ({ ...prev, notas: e.target.value }))}
+                    placeholder="Detalhes sobre a tarefa..."
+                  />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="prioridade">Prioridade</Label>
+                    <select
+                      value={newTask.prioridade}
+                      onChange={(e) => setNewTask(prev => ({ ...prev, prioridade: e.target.value as 'baixa' | 'media' | 'alta' }))}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                    >
+                      <option value="baixa">🟢 Baixa</option>
+                      <option value="media">🟡 Média</option>
+                      <option value="alta">🔴 Alta</option>
+                    </select>
+                  </div>
+                  <div>
+                    <Label htmlFor="prazo">Prazo (opcional)</Label>
+                    <Input
+                      id="prazo"
+                      type="date"
+                      value={newTask.prazo}
+                      onChange={(e) => setNewTask(prev => ({ ...prev, prazo: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <Button onClick={createTask} className="w-full">
+                  Criar Tarefa
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Lista de tarefas */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Tarefas pendentes */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Pendentes ({tarefasAbertas})</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {tarefas.filter(t => t.status === 'pendente').map(task => (
+                      <div key={task.id} className="border rounded-lg p-4 space-y-2">
+                        <div className="flex items-start justify-between">
+                          <h3 className="font-medium">{task.titulo}</h3>
+                          <div className="flex space-x-2">
+                            <Button size="sm" onClick={() => completeTask(task.id)}>
+                              ✅ Concluir (+10 pts)
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => deleteTask(task.id)}>
+                              🗑️
+                            </Button>
+                          </div>
+                        </div>
+                        {task.notas && <p className="text-sm text-gray-600">{task.notas}</p>}
+                        <div className="flex items-center space-x-4 text-xs text-gray-500">
+                          <span className={`px-2 py-1 rounded ${
+                            task.prioridade === 'alta' ? 'bg-red-100 text-red-800' :
+                            task.prioridade === 'media' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-green-100 text-green-800'
+                          }`}>
+                            {task.prioridade === 'alta' ? '🔴 Alta' :
+                             task.prioridade === 'media' ? '🟡 Média' : '🟢 Baixa'}
+                          </span>
+                          {task.prazo && (
+                            <span>📅 {new Date(task.prazo).toLocaleDateString('pt-BR')}</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {tarefasAbertas === 0 && (
+                      <div className="text-center text-gray-500 py-8">
+                        🎉 Nenhuma tarefa pendente!
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Tarefas concluídas */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Concluídas ({tarefasConcluidas})</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {tarefas.filter(t => t.status === 'concluida').map(task => (
+                      <div key={task.id} className="border rounded-lg p-4 space-y-2 opacity-75">
+                        <div className="flex items-start justify-between">
+                          <h3 className="font-medium line-through">{task.titulo}</h3>
+                          <Button size="sm" variant="outline" onClick={() => deleteTask(task.id)}>
+                            🗑️
+                          </Button>
+                        </div>
+                        {task.notas && <p className="text-sm text-gray-600">{task.notas}</p>}
+                        <div className="flex items-center space-x-2 text-xs text-gray-500">
+                          <span className="bg-green-100 text-green-800 px-2 py-1 rounded">
+                            ✅ Concluída
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                    {tarefasConcluidas === 0 && (
+                      <div className="text-center text-gray-500 py-8">
+                        Nenhuma tarefa concluída ainda
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        )}
+
+        {/* Foco */}
+        {currentTab === 'foco' && (
+          <div className="space-y-6">
+            <h2 className="text-3xl font-bold text-gray-900">Sessão de Foco</h2>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Controle de foco */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>
+                    {isFocusing ? '🎯 Focando agora...' : '⏰ Iniciar Foco'}
+                  </CardTitle>
+                  <CardDescription>
+                    {isFocusing 
+                      ? `Tarefa: ${selectedTask?.titulo}` 
+                      : 'Selecione uma tarefa para começar a focar'
+                    }
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {!isFocusing ? (
+                    <>
+                      <div>
+                        <Label>Selecionar Tarefa</Label>
+                        <select
+                          onChange={(e) => {
+                            const task = tarefas.find(t => t.id === e.target.value);
+                            setSelectedTask(task || null);
+                          }}
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                        >
+                          <option value="">Escolha uma tarefa para focar</option>
+                          {tarefas.filter(t => t.status === 'pendente').map(task => (
+                            <option key={task.id} value={task.id}>
+                              {task.titulo}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <Button 
+                        onClick={() => selectedTask && startFocus(selectedTask)} 
+                        disabled={!selectedTask}
+                        className="w-full"
+                      >
+                        🎯 Iniciar Foco
+                      </Button>
+                    </>
+                  ) : (
+                    <div className="text-center space-y-4">
+                      <div className="text-6xl font-mono text-blue-600">
+                        {formatTime(elapsedTime)}
+                      </div>
+                      <div className="text-lg text-gray-600">
+                        Focando em: <strong>{selectedTask?.titulo}</strong>
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        Pontos que você ganhará: {Math.floor(elapsedTime / 300)} (+1 a cada 5 min)
+                      </div>
+                      <Button onClick={endFocus} variant="destructive" className="w-full">
+                        ⏹️ Finalizar Foco
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Estatísticas de foco */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>📊 Estatísticas de Foco</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="text-center p-4 bg-blue-50 rounded">
+                      <div className="text-2xl font-bold text-blue-600">{tempoHoje}</div>
+                      <div className="text-sm text-gray-600">min hoje</div>
+                    </div>
+                    <div className="text-center p-4 bg-green-50 rounded">
+                      <div className="text-2xl font-bold text-green-600">{sessoesFoco.length}</div>
+                      <div className="text-sm text-gray-600">sessões total</div>
+                    </div>
+                    <div className="text-center p-4 bg-purple-50 rounded">
+                      <div className="text-2xl font-bold text-purple-600">
+                        {Math.round(sessoesFoco.reduce((acc, s) => acc + s.duracao, 0) / (sessoesFoco.length || 1))}
+                      </div>
+                      <div className="text-sm text-gray-600">min/sessão média</div>
+                    </div>
+                    <div className="text-center p-4 bg-orange-50 rounded">
+                      <div className="text-2xl font-bold text-orange-600">{currentUser.streak}</div>
+                      <div className="text-sm text-gray-600">dias de streak</div>
+                    </div>
+                  </div>
+
+                  {/* Últimas sessões */}
+                  <div>
+                    <h4 className="font-medium mb-2">Últimas Sessões</h4>
+                    <div className="space-y-2">
+                      {sessoesFoco.slice(0, 3).map(sessao => {
+                        const task = tarefas.find(t => t.id === sessao.taskId);
+                        return (
+                          <div key={sessao.id} className="flex justify-between text-sm p-2 bg-gray-50 rounded">
+                            <span>{task?.titulo || 'Tarefa removida'}</span>
+                            <span className="font-medium">{sessao.duracao} min</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Dicas de produtividade */}
+            <Card>
+              <CardHeader>
+                <CardTitle>💡 Dicas para Maximizar o Foco</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="p-4 bg-blue-50 rounded">
+                    <h4 className="font-medium text-blue-800 mb-2">🍅 Técnica Pomodoro</h4>
+                    <p className="text-sm text-blue-700">Foque por 25 minutos, depois faça uma pausa de 5 minutos.</p>
+                  </div>
+                  <div className="p-4 bg-green-50 rounded">
+                    <h4 className="font-medium text-green-800 mb-2">🔕 Elimine Distrações</h4>
+                    <p className="text-sm text-green-700">Silencie notificações e feche abas desnecessárias.</p>
+                  </div>
+                  <div className="p-4 bg-purple-50 rounded">
+                    <h4 className="font-medium text-purple-800 mb-2">🎯 Uma Tarefa por Vez</h4>
+                    <p className="text-sm text-purple-700">Concentre-se em uma única tarefa para máxima eficiência.</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Relatórios */}
+        {currentTab === 'relatorios' && (
+          <div className="space-y-6">
+            <h2 className="text-3xl font-bold text-gray-900">Relatórios e Análises</h2>
+
+            {/* Gráficos simples com dados tabulares */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>📊 Minutos Focados (Últimos 7 Dias)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {dailyFocusData.map((day, index) => (
+                      <div key={index} className="flex items-center justify-between">
+                        <span className="text-sm text-gray-600">{day.date}</span>
+                        <div className="flex items-center space-x-2">
+                          <div 
+                            className="h-6 bg-blue-500 rounded" 
+                            style={{ width: `${Math.max(day.minutes * 2, 4)}px` }}
+                          />
+                          <span className="text-sm font-medium w-12 text-right">{day.minutes}m</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-4 p-3 bg-blue-50 rounded">
+                    <div className="text-lg font-bold text-blue-600">
+                      {dailyFocusData.reduce((acc, day) => acc + day.minutes, 0)} minutos
+                    </div>
+                    <div className="text-sm text-blue-700">Total dos últimos 7 dias</div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>✅ Tarefas Concluídas (Últimos 7 Dias)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {dailyTasksData.map((day, index) => (
+                      <div key={index} className="flex items-center justify-between">
+                        <span className="text-sm text-gray-600">{day.date}</span>
+                        <div className="flex items-center space-x-2">
+                          <div 
+                            className="h-6 bg-green-500 rounded" 
+                            style={{ width: `${Math.max(day.tasks * 20, 4)}px` }}
+                          />
+                          <span className="text-sm font-medium w-12 text-right">{day.tasks}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-4 p-3 bg-green-50 rounded">
+                    <div className="text-lg font-bold text-green-600">
+                      {dailyTasksData.reduce((acc, day) => acc + day.tasks, 0)} tarefas
+                    </div>
+                    <div className="text-sm text-green-700">Total dos últimos 7 dias</div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Resumo estatístico */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <Card>
+                <CardContent className="p-6 text-center">
+                  <div className="text-3xl font-bold text-blue-600">
+                    {sessoesFoco.reduce((acc, s) => acc + s.duracao, 0)}
+                  </div>
+                  <div className="text-sm text-gray-600">Minutos focados total</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-6 text-center">
+                  <div className="text-3xl font-bold text-green-600">{tarefasConcluidas}</div>
+                  <div className="text-sm text-gray-600">Tarefas concluídas</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-6 text-center">
+                  <div className="text-3xl font-bold text-purple-600">{sessoesFoco.length}</div>
+                  <div className="text-sm text-gray-600">Sessões de foco</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-6 text-center">
+                  <div className="text-3xl font-bold text-orange-600">
+                    {Math.round((tarefasConcluidas / Math.max(tarefas.length, 1)) * 100)}%
+                  </div>
+                  <div className="text-sm text-gray-600">Taxa de conclusão</div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Análise detalhada */}
+            <Card>
+              <CardHeader>
+                <CardTitle>🔍 Análise Detalhada</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <h4 className="font-medium mb-4">📈 Performance Semanal</h4>
+                    <div className="space-y-3">
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-600">Melhor dia de foco:</span>
+                        <span className="font-medium">
+                          {dailyFocusData.reduce((best, day) => 
+                            day.minutes > best.minutes ? day : best, { date: 'N/A', minutes: 0 }
+                          ).date} ({Math.max(...dailyFocusData.map(d => d.minutes))} min)
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-600">Média diária:</span>
+                        <span className="font-medium">
+                          {Math.round(dailyFocusData.reduce((acc, day) => acc + day.minutes, 0) / 7)} min
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-600">Pontos por minuto:</span>
+                        <span className="font-medium">0,2 pts/min</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="font-medium mb-4">🏆 Conquistas</h4>
+                    <div className="space-y-2">
+                      <div className={`p-2 rounded ${currentUser.streak >= 7 ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-600'}`}>
+                        {currentUser.streak >= 7 ? '🏆' : '🔒'} Streak de 7 dias 
+                        {currentUser.streak >= 7 ? ' - Conquistado!' : ` (${7 - currentUser.streak} dias restantes)`}
+                      </div>
+                      <div className={`p-2 rounded ${currentUser.pontos >= 500 ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-600'}`}>
+                        {currentUser.pontos >= 500 ? '🏆' : '🔒'} 500 pontos
+                        {currentUser.pontos >= 500 ? ' - Conquistado!' : ` (${500 - currentUser.pontos} pontos restantes)`}
+                      </div>
+                      <div className={`p-2 rounded ${tarefasConcluidas >= 10 ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-600'}`}>
+                        {tarefasConcluidas >= 10 ? '🏆' : '🔒'} 10 tarefas concluídas
+                        {tarefasConcluidas >= 10 ? ' - Conquistado!' : ` (${10 - tarefasConcluidas} tarefas restantes)`}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Distratores */}
+        {currentTab === 'distratores' && (
+          <div className="space-y-6">
+            <h2 className="text-3xl font-bold text-gray-900">Gerenciar Distratores</h2>
+            <p className="text-gray-600">
+              Cadastre sites que você deve evitar durante as sessões de foco. 
+              O sistema irá alertá-lo sobre esses sites quando iniciar uma sessão.
+            </p>
+
+            {/* Adicionar distrator */}
+            <Card>
+              <CardHeader>
+                <CardTitle>🚫 Adicionar Site Distrator</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex space-x-2">
+                  <Input
+                    placeholder="Ex: youtube.com, instagram.com, tiktok.com"
+                    value={newDistrator}
+                    onChange={(e) => setNewDistrator(e.target.value)}
+                    className="flex-1"
+                  />
+                  <Button onClick={addDistrator}>
+                    Adicionar
+                  </Button>
+                </div>
+                <p className="text-sm text-gray-500 mt-2">
+                  Digite apenas o domínio (sem https:// ou www)
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* Lista de distratores */}
+            <Card>
+              <CardHeader>
+                <CardTitle>📝 Sites Cadastrados ({distratores.length})</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {distratores.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {distratores.map(distrator => (
+                      <div key={distrator.id} className="flex items-center justify-between p-3 border rounded">
+                        <div className="flex items-center space-x-2">
+                          <span className="text-red-500">🚫</span>
+                          <span className="font-medium">{distrator.hostname}</span>
+                        </div>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => removeDistrator(distrator.id)}
+                        >
+                          🗑️
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center text-gray-500 py-8">
+                    <span className="text-4xl mb-4 block">🎯</span>
+                    <p>Nenhum site distrator cadastrado.</p>
+                    <p className="text-sm">Adicione sites que você deve evitar durante o foco.</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Dicas sobre distratores */}
+            <Card>
+              <CardHeader>
+                <CardTitle>💡 Como Funciona</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex items-start space-x-3">
+                    <span className="text-blue-500 mt-1">ℹ️</span>
+                    <div>
+                      <p className="font-medium">Alertas durante o foco</p>
+                      <p className="text-sm text-gray-600">
+                        Quando você iniciar uma sessão de foco, receberá um alerta listando todos os sites que deve evitar.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-start space-x-3">
+                    <span className="text-yellow-500 mt-1">⚠️</span>
+                    <div>
+                      <p className="font-medium">Lembrete visual</p>
+                      <p className="text-sm text-gray-600">
+                        Este é um sistema de lembrete. Para bloquear realmente os sites, use extensões como Cold Turkey ou Freedom.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-start space-x-3">
+                    <span className="text-green-500 mt-1">🎯</span>
+                    <div>
+                      <p className="font-medium">Melhores práticas</p>
+                      <p className="text-sm text-gray-600">
+                        Feche abas desnecessárias antes de iniciar o foco para melhor concentração.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Perfil */}
+        {currentTab === 'perfil' && (
+          <div className="space-y-6">
+            <h2 className="text-3xl font-bold text-gray-900">Meu Perfil</h2>
+            
+            <Card>
+              <CardHeader>
+                <CardTitle>Informações do Usuário</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center space-x-4">
+                  <Avatar className="h-20 w-20">
+                    <AvatarFallback className="text-2xl">{currentUser.nome.substring(0, 2).toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <h3 className="text-xl font-semibold">{currentUser.nome}</h3>
+                    <p className="text-gray-600">{currentUser.email}</p>
+                    <p className="text-sm text-blue-600">Nível {currentUser.nivel} • {currentUser.pontos} pontos</p>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+                  <div className="text-center p-4 bg-blue-50 rounded">
+                    <div className="text-2xl font-bold text-blue-600">{currentUser.pontos}</div>
+                    <div className="text-sm text-gray-600">Total de Pontos</div>
+                  </div>
+                  <div className="text-center p-4 bg-green-50 rounded">
+                    <div className="text-2xl font-bold text-green-600">{currentUser.streak}</div>
+                    <div className="text-sm text-gray-600">Streak Atual</div>
+                  </div>
+                  <div className="text-center p-4 bg-purple-50 rounded">
+                    <div className="text-2xl font-bold text-purple-600">{currentUser.nivel}</div>
+                    <div className="text-sm text-gray-600">Nível Atual</div>
+                  </div>
+                </div>
+
+                <div className="mt-6">
+                  <h4 className="font-medium mb-2">Progresso para o próximo nível</h4>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-blue-600 h-2 rounded-full" 
+                      style={{ width: `${(currentUser.pontos % 100)}%` }}
+                    />
+                  </div>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {currentUser.pontos % 100}/100 pontos para o nível {currentUser.nivel + 1}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
